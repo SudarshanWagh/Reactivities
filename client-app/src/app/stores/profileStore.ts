@@ -1,36 +1,39 @@
 import { makeAutoObservable, reaction, runInAction } from "mobx";
-import { Photo, Profile } from "../models/profile";
+import { Photo, Profile, UserActivity } from "../models/profile";
 import agent from "../api/agent";
 import { store } from "./store";
 
 export default class ProfileStore {
+  currentUserProfile: Profile | null = null;
   profile: Profile | null = null;
   loadingProfile = false;
   uploading = false;
   loading = false;
   followings: Profile[] = [];
   loadingFollowings = false;
-  activeTab = 0;
+  activeTab: number = 0;
+  userActivities: UserActivity[] = [];
+  loadingActivities = false;
 
   constructor() {
     makeAutoObservable(this);
 
     reaction(
       () => this.activeTab,
-      activeTab => {
-        if(activeTab === 3 || activeTab === 4){
-          const predicate = activeTab === 3 ? 'followers' : 'following';
+      (activeTab) => {
+        if (activeTab === 3 || activeTab === 4) {
+          const predicate = activeTab === 3 ? "followers" : "following";
           this.loadFollowings(predicate);
         } else {
           this.followings = [];
         }
       }
-    )
+    );
   }
 
   setActiveTab = (activeTab: number) => {
     this.activeTab = activeTab;
-  }
+  };
 
   get isCurrentUser() {
     if (store.userStore.user && this.profile) {
@@ -137,38 +140,73 @@ export default class ProfileStore {
       await agent.Profiles.updateFollowing(username);
       store.activityStore.updateAttendeeFollowing(username);
       runInAction(() => {
-        if(this.profile && this.profile.username !== store.userStore.user?.username && this.profile.username === username){
-          following ? this.profile.followersCount++ : this.profile.followersCount--;
+        if (
+          this.profile &&
+          this.profile.username !== store.userStore.user?.username &&
+          this.profile.username === username
+        ) {
+          following
+            ? this.profile.followersCount++
+            : this.profile.followersCount--;
           this.profile.following = !this.profile.following;
         }
-        if(this.profile && this.profile.username == store.userStore.user?.username) {
-          following ? this.profile.followingCount++ : this.profile.followingCount--;
+        if (
+          this.profile &&
+          this.profile.username == store.userStore.user?.username
+        ) {
+          following
+            ? this.profile.followingCount++
+            : this.profile.followingCount--;
         }
-        this.followings.forEach(profile => {
-          if(profile.username === username){
-            profile.following ? profile.followersCount-- : profile.followersCount++;
+        this.followings.forEach((profile) => {
+          if (profile.username === username) {
+            profile.following
+              ? profile.followersCount--
+              : profile.followersCount++;
             profile.following = !profile.following;
           }
-        })
+        });
         this.loading = false;
-      })
+      });
     } catch (error) {
       console.log(error);
-      runInAction(() => this.loading = false);
+      runInAction(() => (this.loading = false));
     }
-  }
+  };
 
   loadFollowings = async (predicate: string) => {
     this.loadingFollowings = true;
     try {
-      const followings = await agent.Profiles.listFollowings(this.profile!.username, predicate);
+      const followings = await agent.Profiles.listFollowings(
+        this.profile!.username,
+        predicate
+      );
       runInAction(() => {
         this.followings = followings;
         this.loadingFollowings = false;
-      })
+      });
     } catch (error) {
       console.log(error);
-      runInAction(() => this.loadingFollowings = false);
+      runInAction(() => (this.loadingFollowings = false));
     }
-  }
+  };
+
+  loadUserActivities = async (username: string, predicate?: string) => {
+    this.loadingActivities = true;
+    try {
+      const activities = await agent.Profiles.listActivities(
+        username,
+        predicate!
+      );
+      runInAction(() => {
+        this.userActivities = activities;
+        this.loadingActivities = false;
+      });
+    } catch (error) {
+      console.log(error);
+      runInAction(() => {
+        this.loadingActivities = false;
+      });
+    }
+  };
 }
